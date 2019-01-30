@@ -1,27 +1,37 @@
 module RedBlackTree where
 
+import Data.Data (Data)
+
 import Debug.Trace (trace)
 
-data NodeColor = Red | Black | DBlack deriving (Eq, Show)
+data NodeColor = Red | Black | DBlack deriving (Eq, Show, Data)
 
 data RBTree a = NilNode | DBNilNode | RBNode { color :: NodeColor
                                              , label :: a
                                              , left :: RBTree a
                                              , right :: RBTree a
-                                             } deriving (Eq, Show)
+                                             } deriving (Eq, Show, Data)
 
-insert :: (Eq a, Ord a, Show a) => RBTree a -> a -> RBTree a
+insert :: (Eq a, Ord a) => RBTree a -> a -> RBTree a
 insert tree x = let
-  tempTree = insert0 tree x
+  tempTree = insert0 tree x True
   in tempTree {color = Black}
 
-insert0 :: (Eq a, Ord a, Show a) => RBTree a -> a -> RBTree a
-insert0 NilNode x = RBNode Red x NilNode NilNode
-insert0 (RBNode c l lc rc) x = let
-  insertRight = RBNode c l lc (insert0 rc x)
-  insertLeft = RBNode c l (insert0 lc x) rc
-  newUnbalanced = if (x < l) then insertLeft else insertRight
-  in rebalance newUnbalanced
+insertNoDupes :: (Eq a, Ord a) => RBTree a -> a -> RBTree a
+insertNoDupes tree x = let
+  tempTree = insert0 tree x False
+  in tempTree {color = Black}
+
+insert0 :: (Eq a, Ord a) => RBTree a -> a -> Bool -> RBTree a
+insert0 NilNode x _ = RBNode Red x NilNode NilNode
+insert0 oldTree x allowDupes
+  | ((not allowDupes) && x == l) = RBNode c x lc rc -- overwrite
+  | x < l = insertLeft
+  | otherwise = insertRight
+  where
+    RBNode c l lc rc = oldTree
+    insertRight = rebalance $ RBNode c l lc (insert0 rc x allowDupes)
+    insertLeft = rebalance $ RBNode c l (insert0 lc x allowDupes) rc
 
 -- black node with red left child and red left-left grandchild
 isLeftLeft :: RBTree a -> Bool
@@ -63,7 +73,7 @@ rebalanceRightLeft (RBNode Black l lc (RBNode Red rl (RBNode Red rll rllc rlrc) 
   interimTree = RBNode Black l lc newRightChild
   in rebalanceRightRight interimTree
 
-rebalanceDB :: (Show a) => RBTree a -> RBTree a
+rebalanceDB :: RBTree a -> RBTree a
 -- I didn't divide this up into special cases with their own functions, like
 -- I did in rebalance. Too many ins and outs and what-have-yous.
 -- Red node, one DB child, one black child
@@ -104,7 +114,7 @@ rebalanceDB (RBNode Black l (RBNode Red ll llc (RBNode Black lrl lrlc lrrc)) (RB
   in RBNode Black ll llc (rebalance newRight)
 rebalanceDB t = t
 
-rebalance :: (Show a) => RBTree a -> RBTree a
+rebalance :: RBTree a -> RBTree a
 rebalance tree0
   -- This function just handles black-red-red violations.
   -- rebalanceDB does everything involving Double Black nodes.
@@ -147,11 +157,16 @@ makeTree :: Int -> RBTree Int
 makeTree n = foldl insert NilNode ([1..n])
 
 contains :: (Eq a, Ord a) => RBTree a -> a -> Bool
-contains NilNode _ = False
-contains (RBNode _ val lc rc) x
-  | x == val = True
-  | x < val = contains lc x
-  | x > val = contains rc x
+contains tree x = case (lookupElem tree x) of
+  Nothing -> False
+  _       -> True
+
+lookupElem :: (Eq a, Ord a) => RBTree a -> a -> Maybe a
+lookupElem NilNode _ = Nothing
+lookupElem (RBNode _ val lc rc) x
+  | x == val = Just val
+  | x < val = lookupElem lc x
+  | x > val = lookupElem rc x
 
 treeToList :: RBTree a -> [a]
 treeToList NilNode = []
@@ -189,7 +204,7 @@ prettyPrint0 tree indent = let
 --   | x == label lc = deleteLeftChildNoGrandchildren
 --   | 
 
-delete :: (Eq a, Ord a, Show a) => RBTree a -> a -> RBTree a
+delete :: (Eq a, Ord a) => RBTree a -> a -> RBTree a
 delete tree x = let
   tempTree = delete0 tree x
   in case tempTree of
@@ -197,7 +212,7 @@ delete tree x = let
     NilNode        -> NilNode
     RBNode _ _ _ _ -> tempTree {color = Black}
 
-delete0 :: (Ord a, Show a) => RBTree a -> a -> RBTree a
+delete0 :: (Ord a) => RBTree a -> a -> RBTree a
 delete0 NilNode _ = error "I don't think that element is in this tree."
 delete0 (RBNode c l lc rc) x
   | x < l = rebalance $ RBNode c l (delete0 lc x) rc
@@ -211,7 +226,7 @@ delete0 (RBNode c l lc rc) x
       _       -> rebalance $ RBNode c newValue lc newRC
         where (newValue, newRC) = findAndDeleteMin rc
       
-findAndDeleteMin :: (Show a) => RBTree a -> (a, RBTree a)
+findAndDeleteMin :: RBTree a -> (a, RBTree a)
 findAndDeleteMin NilNode = error "you did it wrong"
 findAndDeleteMin DBNilNode = error "you did it wrong"
 -- This is the minimum value. Return this value and promote its right child.
